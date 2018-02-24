@@ -78,6 +78,8 @@ app.get('/films/:id/recommendations', getFilmRecommendations);
 
 // ROUTE HANDLER
 function getFilmRecommendations(req, res) {
+  const limit = req.query.limit;
+  const id = req.params.id;
   filmModel
     .findOne({ where: { id: req.params.id }, include: [{ all: true }] })
     .then(({ genre }) => {
@@ -100,29 +102,39 @@ function getFilmRecommendations(req, res) {
           const requestList = list.toString();
           request(API + `?films=${requestList}`, function(err, response) {
             const filmId = requestList;
-            const body = JSON.parse(response.body);
-            const bodyMap = body.map(x => {
+            const body = JSON.parse(response.body).filter(
+              c => c.film_id.toString() !== id
+            );
+            const bodyMap = body
+              .map(x => {
+                return {
+                  movieID: x.film_id,
+                  reviews: x.reviews,
+                };
+              })
+              .filter(c => c.reviews.length > 1);
+
+            const bodyMapReviews = bodyMap.map(z => {
+              const movieID = z.movieID;
+              const totalReviews = z.reviews.length;
+              const reviewMap = z.reviews.map(x => {
+                const rating = x.rating;
+                return rating;
+              });
+              const reviewTotal = reviewMap.reduce((a, b) => a + b);
+              const average = (reviewTotal / totalReviews).toFixed(2);
               return {
-                movieID: x.film_id,
-                reviews: x.reviews.map(x => {
-                  const rating = x.rating;
-                  return rating;
-                }),
+                movieID: movieID,
+                totalReviews: totalReviews,
+                averageReviews: average,
               };
             });
-
-            const reviews = bodyMap.map(item => {
-              return item.reviews;
-            });
-            const filter = reviews.filter(x => x.length > 2);
-            const sum = filter.map(c => {
-              const sum = c.reduce((a, b) => {
-                return a + b;
-              });
-              const average = (sum / c.length).toFixed(2);
-              return average;
-            });
-            res.send(sum);
+            const top = bodyMapReviews
+              .sort(function(a, b) {
+                return a.averageReviews < b.averageReviews ? 1 : -1;
+              })
+              .slice(0, limit);
+            res.send(top);
           });
         });
     });
