@@ -79,6 +79,7 @@ app.get('/films/:id/recommendations', getFilmRecommendations);
 // ROUTE HANDLER
 function getFilmRecommendations(req, res) {
   const limit = req.query.limit;
+  const offset = req.query.offset;
   const id = req.params.id;
   filmModel
     .findOne({ where: { id: req.params.id }, include: [{ all: true }] })
@@ -92,6 +93,8 @@ function getFilmRecommendations(req, res) {
     .then(value => {
       filmModel
         .findAll({
+          offset: offset,
+          limit: limit,
           where: { '$genre.name$': value },
           include: [{ all: true }],
         })
@@ -115,7 +118,7 @@ function getFilmRecommendations(req, res) {
               .filter(c => c.reviews.length > 1);
 
             const bodyMapReviews = bodyMap.map(z => {
-              const movieID = z.movieID;
+              const movie = z.movieID;
               const totalReviews = z.reviews.length;
               const reviewMap = z.reviews.map(x => {
                 const rating = x.rating;
@@ -123,18 +126,30 @@ function getFilmRecommendations(req, res) {
               });
               const reviewTotal = reviewMap.reduce((a, b) => a + b);
               const average = (reviewTotal / totalReviews).toFixed(2);
-              return {
-                movieID: movieID,
-                totalReviews: totalReviews,
-                averageReviews: average,
-              };
+              filmModel
+                .findAll({
+                  where: { id: movie },
+                  include: [{ all: true }],
+                })
+                .then(value => {
+                  const valueMap = {
+                    Reccomendations: value.map(a => {
+                      return {
+                        id: movie,
+                        title: a.title,
+                        releaseDate: a.release_date,
+                        genre: a.genre.name,
+                        averageRating: average,
+                        reviews: reviewTotal,
+                      };
+                    }),
+                  };
+                  console.log(valueMap);
+                })
+                .catch(err => {
+                  console.log(err);
+                });
             });
-            const top = bodyMapReviews
-              .sort(function(a, b) {
-                return a.averageReviews < b.averageReviews ? 1 : -1;
-              })
-              .slice(0, limit);
-            res.send(top);
           });
         });
     });
